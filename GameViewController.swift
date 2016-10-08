@@ -14,7 +14,6 @@ struct PhysicsCategory {
 	static let barrier: Int = 8
 	static let obstacle: Int = 16
 	static let line: Int = 32
-	//static let Floor: Int = 64
 }
 
 let pi = Float(M_PI)
@@ -28,11 +27,14 @@ enum GameState { //not finite
 import UIKit
 import QuartzCore
 import SceneKit
+import SpriteKit
 
 
 class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysicsContactDelegate {
 	var scnView: SCNView!
+	var deviceSize: CGSize!
 	var raceScene: SCNScene?
+	var gameOverScene: GameOverScene!
 	
 	var player1Car: SCNNode?
 	var player2Car: SCNNode?
@@ -40,12 +42,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	let obstacleVelocity: Float = 10
 	var readyToShoot: Bool = false
 	
+	let obstacleParticleSystem = SCNParticleSystem(named: "obstacleParticleSystem.scnp", inDirectory: "art.scnassets/Particles")!
+	let obstacleExplodeParticleSystem = SCNParticleSystem(named: "obstacleExplodeParticleSystem.scnp", inDirectory: "art.scnassets/Particles")!
 
-	
 	var mainCameraSelfieStick: SCNNode?
 	var mainCamera: SCNNode?
 	
-	//Playground:
 	let playgroundX: Float = 40 // ?
 	let playgroundZ: Float = 20
 	
@@ -58,14 +60,15 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        
+		deviceSize = UIScreen.main.bounds.size
+		gameOverScene = GameOverScene(gameViewController: self)
+		
 		setupView()
 		setupScene()
 		setupCars()
 		setupCarBarriers()
 		setupLines()
 		setupCameras()
-		setupParticleEffects()
 		setupObstacles()
     }
 	
@@ -120,10 +123,6 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		}
 	}
 	
-	func setupParticleEffects() {
-		
-	}
-	
 	func setupCameras() {
 		mainCameraSelfieStick = raceScene?.rootNode.childNode(withName: "mainCameraSelfieStick", recursively: true)
 		mainCamera = raceScene?.rootNode.childNode(withName: "mainCamera", recursively: true)
@@ -131,23 +130,22 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	}
 	
 	func setupObstacles() {
-		let randomColors: [UIColor] = [UIColor.blue,  UIColor.red,  UIColor.yellow,  UIColor.gray]
 		let obstacleScene = SCNScene(named: "art.scnassets/Scenes/obstacleNormal.scn")
 		let obstacle = obstacleScene?.rootNode.childNode(withName: "obstacle", recursively: true)
 		
 		for sign: Float in [-1, 1] {
 			for i in 1...15 {
-				let randomPosition = SCNVector3(x: Float(i) * 3.5, y: 0.15, z: sign * Float(arc4random_uniform(UInt32(Int(playgroundZ/2 - 2.0))) + 1))
-				let randomColor = randomColors[Int(arc4random_uniform(UInt32(3)))]
+				let randomPosition = SCNVector3(x: Float(i) * 3.5, y: 0.4, z: sign * Float(arc4random_uniform(UInt32(Int(playgroundZ/2 - 2.0))) + 1))
 				
 				let obstacleCopy = obstacle?.clone()
 				obstacleCopy?.geometry = obstacle?.geometry?.copy() as? SCNGeometry
 				obstacleCopy?.position = randomPosition
-				obstacleCopy?.geometry?.materials.first?.diffuse.contents = randomColor
-				obstacleCopy?.eulerAngles = SCNVector3(x: 10.0 * Float(i), y: Float(30 - i), z: 5.0 * Float(i) * sign) //malo na random
 				
 				obstacleCopy?.physicsBody = SCNPhysicsBody(type: .dynamic, shape: nil)
 				obstacleCopy?.physicsBody?.isAffectedByGravity = false
+				obstacleCopy?.eulerAngles = SCNVector3(x: 5.0 * Float(i), y: Float(10 - i), z: 5.0 * Float(i) * sign)
+				obstacleCopy?.physicsBody?.angularVelocity = SCNVector4(x: 0.5, y: 0.3, z: 0.2, w: 2.0)
+				obstacleCopy?.physicsBody?.angularDamping = 0
 				obstacleCopy?.physicsBody?.categoryBitMask = PhysicsCategory.obstacle
 				obstacleCopy?.physicsBody?.collisionBitMask = PhysicsCategory.none
 				obstacleCopy?.physicsBody?.contactTestBitMask = PhysicsCategory.car1 | PhysicsCategory.car2 | PhysicsCategory.barrier
@@ -165,8 +163,20 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	
 	func obstacleCollidedWithCar(car: SCNNode, obstacle: SCNNode) {
 		//gameOver! bring a table!
-		//print("game over!") //for now
-		//gameState = .gameOver
+		if obstacle.name == "obstacleShot" {
+
+		}
+		gameOver(carWon: "first")
+		
+	}
+	
+	func gameOver(carWon: String) {
+		gameState = .gameOver
+		stopTheCars()
+		
+		scnView.overlaySKScene = gameOverScene
+		gameOverScene.popSpritesOnGameOver(playerWon: carWon)
+		removeAllObstacles()
 	}
 	
 	func obstacleInBarrier(barrier: SCNNode, obstacle: SCNNode) {
@@ -175,6 +185,31 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		} else if obstacle.name == "obstacleShot" {
 			obstacle.geometry?.materials.first?.diffuse.contents = UIColor.red
 			obstacle.name = "obstacleReadyToBeRemoved"
+		}
+	}
+	
+	func shotTheObstacle(atVelocity velocity: SCNVector3) {
+		for obstacle in obstacleArray {
+			if obstacle.name == "obstacleInShot" {
+				//obstacle.physicsBody?.velocity = velocity
+				obstacle.addParticleSystem(obstacleParticleSystem)
+				obstacle.physicsBody?.applyForce(velocity, asImpulse: true)
+				obstacle.name = "obstacleShot"
+			}
+		}
+	}
+	
+	func explodeObstacle(obstacle: SCNNode) {
+		let position = obstacle.presentation.position
+		let translationMatrix = SCNMatrix4MakeTranslation(position.x, position.y, position.z)
+		
+		raceScene?.addParticleSystem(obstacleExplodeParticleSystem, transform: translationMatrix)
+		obstacle.removeFromParentNode()
+	}
+	
+	func removeAllObstacles() {
+		for obstacle in obstacleArray {
+			explodeObstacle(obstacle: obstacle) //also removes it
 		}
 	}
 	
@@ -193,14 +228,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		return SCNVector3(obstacleVelocity * cos(angle), 0,  obstacleVelocity * sin(angle))
 	}
 	
-	func shotTheObstacle(atVelocity velocity: SCNVector3) {
-		for obstacle in obstacleArray {
-			if obstacle.name == "obstacleInShot" {
-				obstacle.physicsBody?.velocity = velocity
-				obstacle.name = "obstacleShot"
-			}
-		}
+	func stopTheCars() {
+		player1Car?.physicsBody?.velocity = SCNVector3Zero
+		player2Car?.physicsBody?.velocity = SCNVector3Zero
 	}
+	
 	
 	//Touches:
 	
@@ -223,7 +255,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		}
 	}
 	
-	override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+	override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
 		if gameState == .play {
 			if readyToShoot {
 				let velocity = calculateVelocity(point1: lastTouchedLocation, point2: (touches.first?.location(in: scnView))!)
