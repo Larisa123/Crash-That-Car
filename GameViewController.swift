@@ -17,6 +17,8 @@ struct PhysicsCategory {
 	//static let Floor: Int = 64
 }
 
+let pi = Float(M_PI)
+
 enum GameState { //not finite
 	case start
 	case play
@@ -27,14 +29,17 @@ import UIKit
 import QuartzCore
 import SceneKit
 
+
 class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysicsContactDelegate {
 	var scnView: SCNView!
 	var raceScene: SCNScene?
 	
 	var player1Car: SCNNode?
 	var player2Car: SCNNode?
-	var shootingObstacle: SCNNode?
+	var obstacleArray: [SCNNode] = []
+	let obstacleVelocity: Float = 10
 	var readyToShoot: Bool = false
+	
 
 	
 	var mainCameraSelfieStick: SCNNode?
@@ -136,21 +141,21 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 				let randomColor = randomColors[Int(arc4random_uniform(UInt32(3)))]
 				
 				let obstacleCopy = obstacle?.clone()
-				//obstacleCopy?.geometry = obstacle?.geometry?.copy() as? SCNGeometry
-				//obstacleCopy?.geometry?.firstMaterial = obstacle?.geometry?.copy() as? SCNMaterial
+				obstacleCopy?.geometry = obstacle?.geometry?.copy() as? SCNGeometry
 				obstacleCopy?.position = randomPosition
 				obstacleCopy?.geometry?.materials.first?.diffuse.contents = randomColor
 				obstacleCopy?.eulerAngles = SCNVector3(x: 10.0 * Float(i), y: Float(30 - i), z: 5.0 * Float(i) * sign) //malo na random
 				
-				obstacleCopy?.physicsBody = SCNPhysicsBody(type: .kinematic, shape: nil)
+				obstacleCopy?.physicsBody = SCNPhysicsBody(type: .dynamic, shape: nil)
+				obstacleCopy?.physicsBody?.isAffectedByGravity = false
 				obstacleCopy?.physicsBody?.categoryBitMask = PhysicsCategory.obstacle
 				obstacleCopy?.physicsBody?.collisionBitMask = PhysicsCategory.none
 				obstacleCopy?.physicsBody?.contactTestBitMask = PhysicsCategory.car1 | PhysicsCategory.car2 | PhysicsCategory.barrier
 				
+				obstacleArray.append(obstacleCopy!)
 				raceScene!.rootNode.addChildNode(obstacleCopy!)
 			}
 		}
-		
 	}
 	
 	//Game:
@@ -173,13 +178,28 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		}
 	}
 	
-	func calculateAngle(point1: CGPoint, point2: CGPoint) -> Float {
-		return 0
+	func calculateVelocity(point1: CGPoint, point2: CGPoint) -> SCNVector3 {
+		let deltaY = Float(point1.y) - Float(point2.y)
+		var angle = atan(deltaY / Float((point2.x - point1.x)))
+		
+		if point2.x < point1.x {
+			if deltaY > 0 { angle -= pi/2 }
+			else if deltaY < 0 { angle += pi/2 }
+		} else if point2.x > point1.x {
+			if deltaY > 0 { angle -= pi/2 }
+			else if deltaY < 0 { angle += pi/2 }
+		}
+			
+		return SCNVector3(obstacleVelocity * cos(angle), 0,  obstacleVelocity * sin(angle))
 	}
 	
-	func shotTheObstacle(angle: Float, deltaTime: TimeInterval) {
-		let velocityMagnitude: Float = 15.0 / Float(deltaTime)
-		shootingObstacle?.physicsBody?.velocity = SCNVector3(velocityMagnitude * sin(angle), 0, velocityMagnitude * cos(angle))
+	func shotTheObstacle(atVelocity velocity: SCNVector3) {
+		for obstacle in obstacleArray {
+			if obstacle.name == "obstacleInShot" {
+				obstacle.physicsBody?.velocity = velocity
+				obstacle.name = "obstacleShot"
+			}
+		}
 	}
 	
 	//Touches:
@@ -195,7 +215,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 					if result.node.name == "obstacleReadyToBeShot" {
 						lastTouchedLocation = touch.location(in: scnView)
 						timeSinceLastTap = (event?.timestamp)!
-						shootingObstacle = result.node
+						result.node.name = "obstacleInShot"
 						readyToShoot = true
 					}
 				}
@@ -206,13 +226,14 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
 		if gameState == .play {
 			if readyToShoot {
-				let angle = calculateAngle(point1: lastTouchedLocation, point2: (touches.first?.location(in: scnView))!)
-				let timeElapsed = (event?.timestamp)! - timeSinceLastTap
-				shotTheObstacle(angle: angle, deltaTime: timeElapsed)
+				let velocity = calculateVelocity(point1: lastTouchedLocation, point2: (touches.first?.location(in: scnView))!)
+				shotTheObstacle(atVelocity: velocity)
 				readyToShoot = false
 			}
 		}
 	}
+	
+
 	
 	//Scene Renderer:
 	
