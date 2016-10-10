@@ -13,13 +13,13 @@ struct PhysicsCategory {
 	static let car2: Int = 4
 	static let barrier: Int = 8
 	static let obstacle: Int = 16
-	static let line: Int = 32
+	static let finishLine: Int = 32
 }
 
 let pi = Float(M_PI)
 
 enum GameState { //not finite
-	case start
+	case preparingTheScene
 	case tapToPlay
 	case play
 	case gameOver
@@ -64,9 +64,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	var lastTouchedLocation = CGPoint.zero
 	var timeSinceLastTap: TimeInterval = 0
 	
-	var gameState: GameState = .start
+	var gameState: GameState = .preparingTheScene
 	var tutorialFinished: Bool = false
 	var sounds: [String:SCNAudioSource] = [:]
+	var tapToPlayLogoPlane: SCNNode!
 	
 
     override func viewDidLoad() {
@@ -81,6 +82,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		setupLines()
 		setupCameras()
 		setupSounds()
+		setupTapToPlayLogo()
+		
+		prepareTheScene()
 		setupObstacles()
     }
 	
@@ -110,7 +114,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		
 		for car in [player1Car, player2Car] {
 			car?.physicsBody?.collisionBitMask = PhysicsCategory.floor
-			car?.physicsBody?.contactTestBitMask = PhysicsCategory.line | PhysicsCategory.obstacle
+			car?.physicsBody?.contactTestBitMask = PhysicsCategory.finishLine | PhysicsCategory.obstacle
 			car?.physicsBody?.damping = 0
 		}
 
@@ -130,9 +134,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	
 	func setupLines() {
 		raceScene?.rootNode.enumerateChildNodes { node, stop in
-			if node.name == "line" {
+			if node.name == "finishLine" {
 				node.physicsBody = SCNPhysicsBody(type: .static, shape: nil)
-				node.physicsBody?.categoryBitMask = PhysicsCategory.line
+				node.physicsBody?.categoryBitMask = PhysicsCategory.finishLine
 				node.physicsBody?.collisionBitMask = PhysicsCategory.car1 | PhysicsCategory.car2
 			}
 		}
@@ -144,6 +148,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		scnView.pointOfView = mainCamera
 	}
 	
+	func setupTapToPlayLogo() {
+		tapToPlayLogoPlane = raceScene?.rootNode.childNode(withName: "tapToPlayLogo", recursively: true)
+	}
+	
 	func setupObstacles() {
 		obstacleScene = SCNScene(named: "art.scnassets/Scenes/obstacleNormal.scn")
 		obstacle = obstacleScene?.rootNode.childNode(withName: "obstacle", recursively: true)
@@ -152,9 +160,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	}
 	
 	func addObstacles() {
-		for sign: Float in [-1, 1] {
-			for i in 1...15 {
-				let randomPosition = SCNVector3(x: Float(i) * 3.5, y: 0.4, z: sign * Float(arc4random_uniform(UInt32(Int(playgroundZ/2 - 2.0))) + 1))
+		var delayTime: Double = 0
+		for i in 1...14 {
+			for sign: Float in [-1.0, 1.0] {
+				let randomPosition = SCNVector3(x: Float(i) * 3.3, y: 0.4, z: sign * Float(arc4random_uniform(UInt32(Int(playgroundZ/2 - 2.0))) + 1))
 				
 				let obstacleCopy = obstacle?.clone()
 				obstacleCopy?.geometry = obstacle?.geometry?.copy() as? SCNGeometry
@@ -171,19 +180,62 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 				
 				obstacleArray.append(obstacleCopy!)
 				
-				//DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(1), execute: {
+				DispatchQueue.main.asyncAfter(deadline: .now() + delayTime, execute: {
 					self.raceScene!.rootNode.addChildNode(obstacleCopy!)
-					//self.playSound(node: obstacleCopy, name: "pop")
-				//})
+					self.playSound(node: obstacleCopy, name: "pop")
+				})
+				delayTime += 0.4
 			}
 		}
+	}
+	
+	func prepareTheScene() {
+		gameState = .preparingTheScene
+		getTheCameraToShowTheScene()
+	}
+	
+	//Tap To Play Logo:
+	
+	func showTapToPlayLogo() {
+		let moveUp = SCNAction.moveBy(x: 0, y: 3.0, z: 0, duration: 1.0)
+		let moveDown = moveUp.reversed()
+		
+		tapToPlayLogoPlane.isHidden = false
+		self.playSound(node: tapToPlayLogoPlane, name: "pop")
+		tapToPlayLogoPlane.runAction(SCNAction.repeatForever(SCNAction.sequence([moveUp, moveDown])))
+		gameState = .tapToPlay
+	}
+	
+	func hideTapToPlayLogo() {
+		tapToPlayLogoPlane.removeAllActions()
+		tapToPlayLogoPlane.isHidden = true
+	}
+	
+	//Camera:
+	
+	func getTheCameraToShowTheScene() {
+		let okPosition = mainCamera?.position
+		let outPosition = SCNVector3(8, 35, 0)
+		let outRightPosition = SCNVector3(37, 35, 0)
+		
+		let moveCameraOut = SCNAction.move(to: outPosition, duration: 3.0)
+		let moveCameraToTheRight = SCNAction.move(to: outRightPosition, duration: 5.8)
+		let moveCameraToTheLeft = SCNAction.move(to: outPosition, duration: 1.0)
+		let moveCameraBack = SCNAction.move(to: okPosition!, duration: 2.0)
+		let showTapToPlayLogo = SCNAction.run({node in self.showTapToPlayLogo()})
+		let wait = SCNAction.wait(duration: 2.2)
+		
+		mainCamera?.runAction(SCNAction.sequence([moveCameraOut, moveCameraToTheRight, wait, moveCameraToTheLeft, SCNAction.group([moveCameraBack, wait]), showTapToPlayLogo]))
 	}
 	
 	//Game:
 	
 	func startTheGame() {
-		player1Car?.physicsBody?.velocity = SCNVector3(3, 0, 0)
-		player2Car?.physicsBody?.velocity = SCNVector3(3, 0, 0)
+		hideTapToPlayLogo()
+		
+		player1Car?.physicsBody?.velocity = SCNVector3(5, 0, 0)
+		player2Car?.physicsBody?.velocity = SCNVector3(5, 0, 0)
+		
 		gameState = .play
 	}
 	
@@ -195,20 +247,24 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		if obstacle.name == "obstacleShot" {
 
 		}
-		gameOver(carWon: "first")
 		
 	}
 	
-	func gameOver(carWon: String) {
+	func gameOver(carWon: SCNNode) {
+		let carWonName = carWon.presentation.position.z > 0 ? "first": "second"
 		gameState = .gameOver
 		stopTheCars()
 		
 		scnView.overlaySKScene = gameOverScene
-		gameOverScene.popSpritesOnGameOver(playerWon: carWon)
+		gameOverScene.popSpritesOnGameOver(carWon: carWonName)
 		removeAllObstacles()
 	}
 	
 	func replayGame() {
+		gameOverScene.hideSprites()
+		scnView.overlaySKScene = nil
+		hideTapToPlayLogo()
+		
 		player1Car?.position = player1StartingPosition
 		player2Car?.position = player2StartingPosition
 		player1Car?.isHidden = false
@@ -216,10 +272,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		
 		mainCameraSelfieStick?.position.x = 0
 		addObstacles()
-		gameOverScene.hideSprites()
-		scnView.overlaySKScene = nil
-		gameState = .tapToPlay
+		prepareTheScene()
 	}
+	
+	//Obstacles:
 	
 	func obstacleInBarrier(barrier: SCNNode, obstacle: SCNNode) {
 		if obstacle.name == "obstacle" {
@@ -291,7 +347,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	
 	func playSound(node:SCNNode?, name:String) {
 		if node != nil {
-			if let sound = sounds[name] { node!.runAction(SCNAction.playAudio(sound, waitForCompletion: false)) }
+			if let sound = sounds[name] { node!.runAction(SCNAction.playAudio(sound, waitForCompletion: true)) }
 		}
 	}
 	
@@ -299,7 +355,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	//Touches:
 	
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-		if gameState == .start || gameState == .tapToPlay {
+		if gameState == .tapToPlay {
 			startTheGame()
 		} else if gameState == .play {
 			for touch in touches {
@@ -329,26 +385,30 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	
 	func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
 		if gameState == .play {
-			mainCameraSelfieStick?.position.x = (player1StartingPosition?.x)! + abs(((player1Car?.presentation.position.x)! - (player2Car?.presentation.position.x)!)) / 2 //the camera should be exacly between those two cars (because the playground is short, they won't be able to be apart for a distance too big)
+			let player1X = (player1Car?.presentation.position.x)!
+			let player2X = (player2Car?.presentation.position.x)!
+			let fastestCarX = player1X > player2X ? player1X : player2X
+			mainCameraSelfieStick?.position.x = fastestCarX
 		}
 	}
 	
 	//Physics Contact:
 	
 	func physicsWorld(_ world: SCNPhysicsWorld, didBegin contact: SCNPhysicsContact) {
-		
-		let nodeMaskA = contact.nodeA.physicsBody?.categoryBitMask
-		let nodeMaskB = contact.nodeB.physicsBody?.categoryBitMask
-		//print(nodeMaskA, nodeMaskB)
-		
-		if nodeMaskA == PhysicsCategory.barrier { obstacleInBarrier(barrier: contact.nodeA, obstacle: contact.nodeB) }
-		else if nodeMaskB == PhysicsCategory.barrier { obstacleInBarrier(barrier: contact.nodeB, obstacle: contact.nodeA) }
-		else if (nodeMaskA == PhysicsCategory.car1 || nodeMaskA == PhysicsCategory.car2) {
-			if nodeMaskB == PhysicsCategory.obstacle { obstacleCollidedWithCar(car: contact.nodeA, obstacle: contact.nodeB) }
-			else if nodeMaskB == PhysicsCategory.line { checkIfGameIsFinished(car: contact.nodeA, line: contact.nodeB) }
-		} else if (nodeMaskB == PhysicsCategory.car1 || nodeMaskB == PhysicsCategory.car2) && nodeMaskA == PhysicsCategory.obstacle {
-			if nodeMaskA == PhysicsCategory.obstacle { obstacleCollidedWithCar(car: contact.nodeB, obstacle: contact.nodeA) }
-			else if nodeMaskA == PhysicsCategory.line { checkIfGameIsFinished(car: contact.nodeB, line: contact.nodeA) }
+		if gameState == .play {
+			let nodeMaskA = contact.nodeA.physicsBody?.categoryBitMask
+			let nodeMaskB = contact.nodeB.physicsBody?.categoryBitMask
+			//print(nodeMaskA, nodeMaskB)
+			
+			if nodeMaskA == PhysicsCategory.barrier { obstacleInBarrier(barrier: contact.nodeA, obstacle: contact.nodeB) }
+			else if nodeMaskB == PhysicsCategory.barrier { obstacleInBarrier(barrier: contact.nodeB, obstacle: contact.nodeA) }
+			else if (nodeMaskA == PhysicsCategory.car1 || nodeMaskA == PhysicsCategory.car2) {
+				if nodeMaskB == PhysicsCategory.obstacle { obstacleCollidedWithCar(car: contact.nodeA, obstacle: contact.nodeB) }
+				else if nodeMaskB == PhysicsCategory.finishLine { gameOver(carWon: contact.nodeA) }
+			} else if (nodeMaskB == PhysicsCategory.car1 || nodeMaskB == PhysicsCategory.car2) && nodeMaskA == PhysicsCategory.obstacle {
+				if nodeMaskA == PhysicsCategory.obstacle { obstacleCollidedWithCar(car: contact.nodeB, obstacle: contact.nodeA) }
+				else if nodeMaskA == PhysicsCategory.finishLine { gameOver(carWon: contact.nodeB) }
+			}
 		}
 	}
 	

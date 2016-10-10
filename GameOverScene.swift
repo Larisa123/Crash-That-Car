@@ -75,8 +75,8 @@ class GameOverScene: SKScene {
 		
 	}
 	
-	func popSpritesOnGameOver(playerWon player: String) {
-		let playerSprite = player == "first" ? player1WonSprite: player2WonSprite
+	func popSpritesOnGameOver(carWon car: String) {
+		let playerSprite = car == "first" ? player1WonSprite: player2WonSprite
 		
 		let popGameOverLabel = SKAction.run({node in
 			self.gameOverLabelSprite.isHidden = false
