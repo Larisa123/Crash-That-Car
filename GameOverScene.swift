@@ -90,9 +90,10 @@ class GameOverScene: SKScene {
 			self.replayButton.isHidden = false
 			let popRepeatAction = SKAction.repeatForever(SKAction.sequence([SKAction.scale(by: 1.1, duration: 1.0), SKAction.scale(by: 0.9, duration: 1.0)]))
 			self.replayButton.run(popRepeatAction)
+			self.replayButton.run(SKAction.playSoundFileNamed("art.scnassets/Sounds/pop.wav", waitForCompletion: true))
 		})
 		
-		let waitAction = SKAction.wait(forDuration: 0.5)
+		let waitAction = SKAction.wait(forDuration: 0.8)
 		
 		run(SKAction.sequence([popGameOverLabel, waitAction, popPlayerWon, waitAction, popReplayButton]))
 	}
@@ -108,6 +109,16 @@ class GameOverScene: SKScene {
 	func pop(node: SKSpriteNode) {
 		let popAction = SKAction.sequence([SKAction.scale(to: 1.1, duration: 0.1), SKAction.scale(to: 0.9, duration: 0.3)])
 		node.run(popAction)
+		//gameViewController.playSound(node: gameViewController.mainCameraSelfieStick, name: "pop") //an SCNNode has to play the song, node is SKSpriteNode and can not play it
+		node.run(SKAction.playSoundFileNamed("art.scnassets/Sounds/pop.wav", waitForCompletion: true))
+	}
+	
+	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+		for touch in touches {
+			if(nodes(at: touch.location(in: self)).first == replayButton) {
+				gameViewController.replayGame()
+			}
+		}
 	}
 	
 	required init?(coder aDecoder: NSCoder) {fatalError("init(coder:) has not been implemented")}

@@ -20,6 +20,7 @@ let pi = Float(M_PI)
 
 enum GameState { //not finite
 	case start
+	case tapToPlay
 	case play
 	case gameOver
 }
@@ -36,18 +37,27 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	var raceScene: SCNScene?
 	var gameOverScene: GameOverScene!
 	
+	
+	//Player
 	var player1Car: SCNNode?
 	var player2Car: SCNNode?
+	var player1StartingPosition: SCNVector3!
+	var player2StartingPosition: SCNVector3!
+	
+	//Obstacle
 	var obstacleArray: [SCNNode] = []
 	let obstacleVelocity: Float = 10
 	var readyToShoot: Bool = false
-	
+	var obstacleScene: SCNScene!
+	var obstacle: SCNNode!
 	let obstacleParticleSystem = SCNParticleSystem(named: "obstacleParticleSystem.scnp", inDirectory: "art.scnassets/Particles")!
 	let obstacleExplodeParticleSystem = SCNParticleSystem(named: "obstacleExplodeParticleSystem.scnp", inDirectory: "art.scnassets/Particles")!
-
+	
+	//Camera
 	var mainCameraSelfieStick: SCNNode?
 	var mainCamera: SCNNode?
 	
+	//Playground and game
 	let playgroundX: Float = 40 // ?
 	let playgroundZ: Float = 20
 	
@@ -56,6 +66,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	
 	var gameState: GameState = .start
 	var tutorialFinished: Bool = false
+	var sounds: [String:SCNAudioSource] = [:]
 	
 
     override func viewDidLoad() {
@@ -69,6 +80,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		setupCarBarriers()
 		setupLines()
 		setupCameras()
+		setupSounds()
 		setupObstacles()
     }
 	
@@ -92,6 +104,9 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		for car in [player1Car, player2Car] { car?.physicsBody = SCNPhysicsBody(type: .dynamic, shape: nil) }
 		player1Car?.physicsBody?.categoryBitMask = PhysicsCategory.car1
 		player2Car?.physicsBody?.categoryBitMask = PhysicsCategory.car2
+		
+		player1StartingPosition = player1Car?.presentation.position
+		player2StartingPosition = player2Car?.presentation.position
 		
 		for car in [player1Car, player2Car] {
 			car?.physicsBody?.collisionBitMask = PhysicsCategory.floor
@@ -130,9 +145,13 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	}
 	
 	func setupObstacles() {
-		let obstacleScene = SCNScene(named: "art.scnassets/Scenes/obstacleNormal.scn")
-		let obstacle = obstacleScene?.rootNode.childNode(withName: "obstacle", recursively: true)
+		obstacleScene = SCNScene(named: "art.scnassets/Scenes/obstacleNormal.scn")
+		obstacle = obstacleScene?.rootNode.childNode(withName: "obstacle", recursively: true)
 		
+		addObstacles()
+	}
+	
+	func addObstacles() {
 		for sign: Float in [-1, 1] {
 			for i in 1...15 {
 				let randomPosition = SCNVector3(x: Float(i) * 3.5, y: 0.4, z: sign * Float(arc4random_uniform(UInt32(Int(playgroundZ/2 - 2.0))) + 1))
@@ -151,12 +170,22 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 				obstacleCopy?.physicsBody?.contactTestBitMask = PhysicsCategory.car1 | PhysicsCategory.car2 | PhysicsCategory.barrier
 				
 				obstacleArray.append(obstacleCopy!)
-				raceScene!.rootNode.addChildNode(obstacleCopy!)
+				
+				//DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(1), execute: {
+					self.raceScene!.rootNode.addChildNode(obstacleCopy!)
+					//self.playSound(node: obstacleCopy, name: "pop")
+				//})
 			}
 		}
 	}
 	
 	//Game:
+	
+	func startTheGame() {
+		player1Car?.physicsBody?.velocity = SCNVector3(3, 0, 0)
+		player2Car?.physicsBody?.velocity = SCNVector3(3, 0, 0)
+		gameState = .play
+	}
 	
 	func checkIfGameIsFinished(car: SCNNode, line: SCNNode) {
 	}
@@ -177,6 +206,19 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		scnView.overlaySKScene = gameOverScene
 		gameOverScene.popSpritesOnGameOver(playerWon: carWon)
 		removeAllObstacles()
+	}
+	
+	func replayGame() {
+		player1Car?.position = player1StartingPosition
+		player2Car?.position = player2StartingPosition
+		player1Car?.isHidden = false
+		player2Car?.isHidden = false
+		
+		mainCameraSelfieStick?.position.x = 0
+		addObstacles()
+		gameOverScene.hideSprites()
+		scnView.overlaySKScene = nil
+		gameState = .tapToPlay
 	}
 	
 	func obstacleInBarrier(barrier: SCNNode, obstacle: SCNNode) {
@@ -230,17 +272,35 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	
 	func stopTheCars() {
 		player1Car?.physicsBody?.velocity = SCNVector3Zero
+		//player1Car?.isHidden = true
 		player2Car?.physicsBody?.velocity = SCNVector3Zero
+		//player2Car?.isHidden = true
+	}
+	
+	//Sounds:
+	
+	func setupSounds() {
+		loadSound("pop", fileNamed: "art.scnassets/Sounds/pop.wav")
+	}
+	
+	func loadSound(_ name:String, fileNamed:String) {
+		let sound = SCNAudioSource(fileNamed: fileNamed)!
+		sound.load()
+		sounds[name] = sound
+	}
+	
+	func playSound(node:SCNNode?, name:String) {
+		if node != nil {
+			if let sound = sounds[name] { node!.runAction(SCNAction.playAudio(sound, waitForCompletion: false)) }
+		}
 	}
 	
 	
 	//Touches:
 	
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-		if gameState == .start { //for now
-			player1Car?.physicsBody?.velocity = SCNVector3(3, 0, 0)
-			player2Car?.physicsBody?.velocity = SCNVector3(3, 0, 0)
-			gameState = .play
+		if gameState == .start || gameState == .tapToPlay {
+			startTheGame()
 		} else if gameState == .play {
 			for touch in touches {
 				for result in scnView.hitTest(touch.location(in: scnView), options: nil) {
@@ -265,12 +325,12 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		}
 	}
 	
-
-	
 	//Scene Renderer:
 	
 	func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
-		
+		if gameState == .play {
+			mainCameraSelfieStick?.position.x = (player1StartingPosition?.x)! + abs(((player1Car?.presentation.position.x)! - (player2Car?.presentation.position.x)!)) / 2 //the camera should be exacly between those two cars (because the playground is short, they won't be able to be apart for a distance too big)
+		}
 	}
 	
 	//Physics Contact:
@@ -294,7 +354,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	
 	
 	//Unrelevant variables and methods:
-    
+	
     override var shouldAutorotate: Bool { return true }
     override var prefersStatusBarHidden: Bool { return true }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
