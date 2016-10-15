@@ -17,7 +17,7 @@ class GameOverScene: SKScene {
 	var player1WonSprite: SKSpriteNode!
 	var player2WonSprite: SKSpriteNode!
 	var replayButton: SKSpriteNode!
-	//var mainTableSprite: SKSpriteNode!
+	var tapToPlayLogoSprite: SKSpriteNode!
 	
 	init(gameViewController: GameViewController) {
 		self.gameViewController = gameViewController
@@ -35,14 +35,7 @@ class GameOverScene: SKScene {
 		//setupMainTable()
 		setupSprites(scale: scale)
 	}
-	
-	/*
-	func setupMainTable() {
-		mainTableSprite = SKSpriteNode(imageNamed: "square.png")
-		mainTableSprite.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-		mainTableSprite.position = CGPoint(x: deviceSize.width/2, y: deviceSize.height/2)
-		addChild(mainTableSprite)
-	}*/
+
 	
 	func setupSprites(scale: CGFloat) {
 		gameOverLabelSprite = SKSpriteNode(imageNamed: "gameOverLabel.png")
@@ -65,7 +58,7 @@ class GameOverScene: SKScene {
 			sprite?.isHidden = true
 		}
 		
-		replayButton = SKSpriteNode(imageNamed: "replayLabel")
+		replayButton = SKSpriteNode(imageNamed: "replayLabel.png")
 		replayButton.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 		replayButton.position = CGPoint(x: deviceSize.width/2, y: deviceSize.height * 0.25)
 		replayButton.size.width *= scale
@@ -73,29 +66,24 @@ class GameOverScene: SKScene {
 		addChild(replayButton)
 		replayButton.isHidden = true
 		
+		tapToPlayLogoSprite = SKSpriteNode(imageNamed: "tapToPlayLogo.png")
+		tapToPlayLogoSprite.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+		tapToPlayLogoSprite.position = CGPoint(x: deviceSize.width/2, y: deviceSize.height/2)
+		tapToPlayLogoSprite.size.width *= scale * 1.2
+		tapToPlayLogoSprite.size.height *= scale * 1.2
+		addChild(tapToPlayLogoSprite)
+		tapToPlayLogoSprite.isHidden = true
+		
 	}
 	
 	func popSpritesOnGameOver(carWon car: String) {
 		let playerSprite = car == "first" ? player1WonSprite: player2WonSprite
 		
-		let popGameOverLabel = SKAction.run({node in
-			self.gameOverLabelSprite.isHidden = false
-			self.pop(node: self.gameOverLabelSprite)
-		})
-		let popPlayerWon = SKAction.run({node in
-			playerSprite?.isHidden = false
-			self.pop(node: playerSprite!)
-		})
-		let popReplayButton = SKAction.run({node in
-			self.replayButton.isHidden = false
-			let popRepeatAction = SKAction.repeatForever(SKAction.sequence([SKAction.scale(by: 1.1, duration: 1.0), SKAction.scale(by: 0.9, duration: 1.0)]))
-			self.replayButton.run(popRepeatAction)
-			self.replayButton.run(SKAction.playSoundFileNamed("art.scnassets/Sounds/pop.wav", waitForCompletion: true))
-		})
-		
-		let waitAction = SKAction.wait(forDuration: 0.8)
-		
-		run(SKAction.sequence([popGameOverLabel, waitAction, popPlayerWon, waitAction, popReplayButton]))
+		let popGameOverLabel = SKAction.run({ self.pop(node: self.gameOverLabelSprite) })
+		let popPlayerWon = SKAction.run({ self.pop(node: playerSprite!) })
+		let popReplayButton = SKAction.run({ self.repeatPopForever(node: self.replayButton) })
+				
+		run(SKAction.sequence([popGameOverLabel, SKAction.wait(forDuration: 0.7), popPlayerWon, SKAction.wait(forDuration: 0.7), popReplayButton]))
 	}
 	
 	func hideSprites() {
@@ -107,15 +95,35 @@ class GameOverScene: SKScene {
 	}
 	
 	func pop(node: SKSpriteNode) {
+		node.isHidden = false
 		let popAction = SKAction.sequence([SKAction.scale(to: 1.1, duration: 0.1), SKAction.scale(to: 0.9, duration: 0.3)])
 		node.run(popAction)
-		//gameViewController.playSound(node: gameViewController.mainCameraSelfieStick, name: "pop") //an SCNNode has to play the song, node is SKSpriteNode and can not play it
 		node.run(SKAction.playSoundFileNamed("art.scnassets/Sounds/pop.wav", waitForCompletion: true))
+	}
+	
+	func repeatPopForever(node: SKSpriteNode) {
+		node.isHidden = false
+		let popRepeatAction = SKAction.sequence([SKAction.scale(to: 1.1, duration: 1.0), SKAction.scale(to: 0.9, duration: 1.0)])
+		node.run(SKAction.repeatForever(popRepeatAction))
+		node.run(SKAction.playSoundFileNamed("art.scnassets/Sounds/pop.wav", waitForCompletion: true))
+
+	}
+	
+	func showTapToPlayLogo() {
+		tapToPlayLogoSprite.isHidden = false
+		repeatPopForever(node: tapToPlayLogoSprite)
+		gameViewController.gameState = .tapToPlay
+	}
+	
+	func hideTapToPlayLogo() {
+		tapToPlayLogoSprite.removeAllActions()
+		tapToPlayLogoSprite.isHidden = true
 	}
 	
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
-			if(nodes(at: touch.location(in: self)).first == replayButton) {
+			if gameViewController.gameState == .tapToPlay { gameViewController.startTheGame() }
+			else if gameViewController.gameState == .gameOver && (nodes(at: touch.location(in: self)).first == replayButton) {
 				gameViewController.replayGame()
 			}
 		}
