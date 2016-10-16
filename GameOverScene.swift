@@ -19,6 +19,11 @@ class GameOverScene: SKScene {
 	var replayButton: SKSpriteNode!
 	var tapToPlayLogoSprite: SKSpriteNode!
 	
+	var logo1: SKSpriteNode!
+	var logo2: SKSpriteNode!
+	var logo3: SKSpriteNode!
+	var logoGo: SKSpriteNode!
+	
 	init(gameViewController: GameViewController) {
 		self.gameViewController = gameViewController
 		self.deviceSize = gameViewController.deviceSize
@@ -74,16 +79,29 @@ class GameOverScene: SKScene {
 		addChild(tapToPlayLogoSprite)
 		tapToPlayLogoSprite.isHidden = true
 		
+		
+		logo1 = SKSpriteNode(imageNamed: "logo1.png")
+		logo2 = SKSpriteNode(imageNamed: "logo2.png")
+		logo3 = SKSpriteNode(imageNamed: "logo3.png")
+		logoGo = SKSpriteNode(imageNamed: "logoGo.png")
+		for logo in [logo1, logo2, logo3, logoGo] {
+			logo?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+			logo?.position = CGPoint(x: deviceSize.width/2, y: deviceSize.height/2)
+			logo?.size.width *= scale * 2.0
+			logo?.size.height *= scale * 2.0
+			addChild(logo!)
+			logo?.isHidden = true
+		}
 	}
 	
 	func popSpritesOnGameOver(carWon car: String) {
 		let playerSprite = car == "first" ? player1WonSprite: player2WonSprite
 		
-		let popGameOverLabel = SKAction.run({ self.pop(node: self.gameOverLabelSprite) })
-		let popPlayerWon = SKAction.run({ self.pop(node: playerSprite!) })
+		let popGameOverLabel = SKAction.run({ self.pop(node: self.gameOverLabelSprite, withSound: true) })
+		let popPlayerWon = SKAction.run({ self.pop(node: playerSprite!, withSound: true) })
 		let popReplayButton = SKAction.run({ self.repeatPopForever(node: self.replayButton) })
 				
-		run(SKAction.sequence([popGameOverLabel, SKAction.wait(forDuration: 0.7), popPlayerWon, SKAction.wait(forDuration: 0.7), popReplayButton]))
+		run(SKAction.sequence([popGameOverLabel, SKAction.wait(forDuration: 1.0), popPlayerWon, SKAction.wait(forDuration: 1.0), popReplayButton]))
 	}
 	
 	func hideSprites() {
@@ -94,11 +112,17 @@ class GameOverScene: SKScene {
 		replayButton.isHidden = true
 	}
 	
-	func pop(node: SKSpriteNode) {
+	func pop(node: SKSpriteNode, withSound: Bool) {
+		let popAction: SKAction!
+		
 		node.isHidden = false
-		let popAction = SKAction.sequence([SKAction.scale(to: 1.1, duration: 0.1), SKAction.scale(to: 0.9, duration: 0.3)])
+		if withSound {
+			popAction = SKAction.sequence([SKAction.scale(to: 1.1, duration: 0.1), SKAction.scale(to: 0.9, duration: 0.3)])
+			node.run(SKAction.playSoundFileNamed("art.scnassets/Sounds/pop.wav", waitForCompletion: true))
+		} else {
+			popAction = SKAction.sequence([SKAction.scale(to: 1.15, duration: 0.2), SKAction.scale(to: 0.85, duration: 0.4)])
+		}
 		node.run(popAction)
-		node.run(SKAction.playSoundFileNamed("art.scnassets/Sounds/pop.wav", waitForCompletion: true))
 	}
 	
 	func repeatPopForever(node: SKSpriteNode) {
@@ -120,9 +144,33 @@ class GameOverScene: SKScene {
 		tapToPlayLogoSprite.isHidden = true
 	}
 	
+	func countDown() {
+		gameViewController.gameState = .countDown
+		
+		hideTapToPlayLogo()
+		gameViewController.scnView.pointOfView = gameViewController.mainCamera
+		
+		run(SKAction.sequence([SKAction.wait(forDuration: 0.6),  SKAction.playSoundFileNamed("art.scnassets/Sounds/countdown.wav", waitForCompletion: true)]))
+		
+		var delayTime = 0.6
+		
+		for logo in  [logo3, logo2, logo1, logoGo] {
+			DispatchQueue.main.asyncAfter(deadline: .now() + delayTime, execute: {
+				self.pop(node: logo!, withSound: false)
+			})
+			DispatchQueue.main.asyncAfter(deadline: .now() + delayTime + 0.7, execute: {
+				logo?.isHidden = true
+			})
+			delayTime += 1.0
+		}
+		DispatchQueue.main.asyncAfter(deadline: .now() + delayTime - 1.0, execute: {
+			self.gameViewController.startTheGame()
+		})
+	}
+	
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
 		for touch in touches {
-			if gameViewController.gameState == .tapToPlay { gameViewController.startTheGame() }
+			if gameViewController.gameState == .tapToPlay { countDown() }
 			else if gameViewController.gameState == .gameOver && (nodes(at: touch.location(in: self)).first == replayButton) {
 				gameViewController.replayGame()
 			}
