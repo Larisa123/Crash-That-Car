@@ -22,7 +22,7 @@ class GameOverScene: SKScene {
 	var logo1: SKSpriteNode!
 	var logo2: SKSpriteNode!
 	var logo3: SKSpriteNode!
-	var logoGo: SKSpriteNode!
+	var logo0: SKSpriteNode!
 	
 	init(gameViewController: GameViewController) {
 		self.gameViewController = gameViewController
@@ -57,8 +57,8 @@ class GameOverScene: SKScene {
 		for sprite in [player1WonSprite, player2WonSprite] {
 			sprite?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 			sprite?.position = CGPoint(x: deviceSize.width/2, y: deviceSize.height * 0.55)
-			sprite?.size.width *= scale * 1.1
-			sprite?.size.height *= scale * 1.1
+			sprite?.size.width *= scale * 1.3
+			sprite?.size.height *= scale * 1.3
 			addChild(sprite!)
 			sprite?.isHidden = true
 		}
@@ -83,8 +83,8 @@ class GameOverScene: SKScene {
 		logo1 = SKSpriteNode(imageNamed: "logo1.png")
 		logo2 = SKSpriteNode(imageNamed: "logo2.png")
 		logo3 = SKSpriteNode(imageNamed: "logo3.png")
-		logoGo = SKSpriteNode(imageNamed: "logoGo.png")
-		for logo in [logo1, logo2, logo3, logoGo] {
+		logo0 = SKSpriteNode(imageNamed: "logo0.png")
+		for logo in [logo1, logo2, logo3, logo0] {
 			logo?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 			logo?.position = CGPoint(x: deviceSize.width/2, y: deviceSize.height/2)
 			logo?.size.width *= scale * 2.0
@@ -97,11 +97,10 @@ class GameOverScene: SKScene {
 	func popSpritesOnGameOver(carWon car: String) {
 		let playerSprite = car == "first" ? player1WonSprite: player2WonSprite
 		
-		let popGameOverLabel = SKAction.run({ self.pop(node: self.gameOverLabelSprite, withSound: true) })
-		let popPlayerWon = SKAction.run({ self.pop(node: playerSprite!, withSound: true) })
-		let popReplayButton = SKAction.run({ self.repeatPopForever(node: self.replayButton) })
-				
-		run(SKAction.sequence([popGameOverLabel, SKAction.wait(forDuration: 1.0), popPlayerWon, SKAction.wait(forDuration: 1.0), popReplayButton]))
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: { self.pop(node: self.gameOverLabelSprite, withSound: true) })
+		DispatchQueue.main.asyncAfter(deadline: .now() + 0.9, execute: { self.pop(node: playerSprite!, withSound: true) })
+		DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: { self.repeatPopForever(node: self.replayButton) })
+		DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: { self.gameViewController.gameState = .gameOverTapToPlay })
 	}
 	
 	func hideSprites() {
@@ -154,7 +153,7 @@ class GameOverScene: SKScene {
 		
 		var delayTime = 0.6
 		
-		for logo in  [logo3, logo2, logo1, logoGo] {
+		for logo in  [logo3, logo2, logo1, logo0] {
 			DispatchQueue.main.asyncAfter(deadline: .now() + delayTime, execute: {
 				self.pop(node: logo!, withSound: false)
 			})
@@ -163,15 +162,15 @@ class GameOverScene: SKScene {
 			})
 			delayTime += 1.0
 		}
-		DispatchQueue.main.asyncAfter(deadline: .now() + delayTime - 1.0, execute: {
+		DispatchQueue.main.asyncAfter(deadline: .now() + delayTime - 0.5, execute: {
 			self.gameViewController.startTheGame()
 		})
 	}
 	
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-		for touch in touches {
+		for _ in touches {
 			if gameViewController.gameState == .tapToPlay { countDown() }
-			else if gameViewController.gameState == .gameOver && (nodes(at: touch.location(in: self)).first == replayButton) {
+			else if gameViewController.gameState == .gameOverTapToPlay {
 				gameViewController.replayGame()
 			}
 		}

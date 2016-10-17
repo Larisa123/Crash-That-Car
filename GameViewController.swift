@@ -34,6 +34,7 @@ enum GameState { //not finite
 	case countDown
 	case play
 	case gameOver
+	case gameOverTapToPlay
 }
 
 import UIKit
@@ -56,7 +57,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	var car2Node: SCNNode?
 	var player1StartingPosition: SCNVector3!
 	var player2StartingPosition: SCNVector3!
-	let carVelocityMagnitude = 3.0
+	let carVelocityMagnitude = 1.0
 	
 	var barrier1: SCNNode!
 	var barrier2: SCNNode!
@@ -67,36 +68,43 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	
 	//Obstacle
 	var obstacleArray: [SCNNode] = []
-	let obstacleVelocity: Float = 7.0
+	let obstacleVelocity: Float = 1.7
 	var readyToShoot: Bool = false
 	var obstacleScene: SCNScene!
 	var obstacleNode: SCNNode!
+	
 	var speedUpObstacleScene: SCNScene!
 	var speedUpObstacleNode: SCNNode!
-	
 	var speedUpObstacleArray: [SCNNode] = []
 	
 	let obstacleParticleSystem = SCNParticleSystem(named: "obstacleParticleSystem.scnp", inDirectory: "art.scnassets/Particles")!
 	let obstacleExplodeParticleSystem = SCNParticleSystem(named: "obstacleExplodeParticleSystem.scnp", inDirectory: "art.scnassets/Particles")!
 	let obstacleExplodeBigParticleSystem = SCNParticleSystem(named: "obstacleExplodeBigParticleSystem.scnp", inDirectory: "art.scnassets/Particles")!
-	let readyToExplodeParticleSystem = SCNParticleSystem(named: "readyToExplode", inDirectory: "art.scnassets/Particles")!
+	let obstacleReadyToShootParticleSystem = SCNParticleSystem(named: "readyToShoot", inDirectory: "art.scnassets/Particles")!
 	let carSmokeParticleSystem = SCNParticleSystem(named: "carSmoke.scnp", inDirectory: "art.scnassets/Particles")!
 	let speedUpObstacleParticleSystem = SCNParticleSystem(named: "speedUp.scnp", inDirectory: "art.scnassets/Particles")!
-	let speedUpObstacleExplodeParticleSystem = SCNParticleSystem(named: "speedUpObstacleExplode", inDirectory: "art.scnassets/Particles")
+	let speedUpObstacleExplodeParticleSystem = SCNParticleSystem(named: "speedUpObstacleExplode", inDirectory: "art.scnassets/Particles")!
+	let obstacleReadyToExplodeParticleSystem = SCNParticleSystem(named: "obstacleReadyToExplode", inDirectory: "art.scnassets/Particles")!
 	
 	//Camera
 	var mainCamera: SCNNode?
 	var sideCamera: SCNNode?
 	
 	//Playground and game
-	let playgroundZ: Float = 20
+	let playgroundZ: Float = 24
 	var lastTouchedLocation = CGPoint.zero
 	
 	var gameState: GameState = .preparingTheScene
 	var tutorialFinished: Bool = false
 	var sounds: [String:SCNAudioSource] = [:]
 	
-
+	//Controllers:
+	var controllersArray: [SCNNode] = []
+	var player1LeftController: SCNNode!
+	var player1RightController: SCNNode!
+	var player2LeftController: SCNNode!
+	var player2RightController: SCNNode!
+	
     override func viewDidLoad() {
         super.viewDidLoad()
 		deviceSize = UIScreen.main.bounds.size
@@ -109,9 +117,11 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		setupLines()
 		setupCameras()
 		setupSounds()
+		setupControllers()
 		
 		prepareTheScene()
 		setupObstacles()
+		
 	}
 	
 	//Setups:
@@ -198,6 +208,28 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		sideCamera = raceScene?.rootNode.childNode(withName: "sideCamera", recursively: true)
 	}
 	
+	//Controllers:
+	
+	func setupControllers() {
+		player1LeftController = raceScene?.rootNode.childNode(withName: "player1Left", recursively: true)
+		controllersArray.append(player1LeftController)
+		player1RightController = raceScene?.rootNode.childNode(withName: "player1Right", recursively: true)
+		controllersArray.append(player1RightController)
+		player2LeftController = raceScene?.rootNode.childNode(withName: "player2Left", recursively: true)
+		controllersArray.append(player2LeftController)
+		player2RightController = raceScene?.rootNode.childNode(withName: "player2Right", recursively: true)
+		controllersArray.append(player2RightController)
+		
+		hideControllers()
+	}
+	
+	func showControllers() {
+		for controller in controllersArray { controller.isHidden = false }
+	}
+	func hideControllers() {
+		for controller in controllersArray { controller.isHidden = true }
+	}
+	
 	
 	//Camera:
 	
@@ -218,6 +250,8 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		
 		self.startTheCar()
 		self.gameState = .play
+		
+		showControllers()
 	}
 	
 	func replayGame() {
@@ -231,18 +265,20 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		car1Node?.isHidden = false
 		car2Node?.isHidden = false
 		
-		mainCamera?.position.x = 1
+		mainCamera?.position.x = 0
 		addObstacles()
 		prepareTheScene()
 	}
 	
 	func gameOver(carWon: SCNNode, atFinishLine: Bool) {
+		gameState = .gameOver
+		stopTheCars()
+		hideControllers()
+		
 		let carWonName: String!
 		
 		if atFinishLine {
 			carWonName = carWon.presentation.position.z > 0 ? "first": "second"
-			gameState = .gameOver
-			stopTheCars()
 		} else {
 			let carThatGotHit = carWon.presentation.position.z > 0 ? "first": "second"
 			carWonName = carThatGotHit == "first" ? "second" : "first"
@@ -251,6 +287,7 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		scnView.overlaySKScene = gameOverScene
 		gameOverScene.popSpritesOnGameOver(carWon: carWonName)
 		removeAllObstacles()
+		
 	}
 	
 	
@@ -264,19 +301,15 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		speedUpObstacleNode = speedUpObstacleScene?.rootNode.childNode(withName: "speedUpObstacle", recursively: true)
 		
 		addObstacles()
-		addSpeedUpObstacles()
 	}
 	
 	func addObstacles() {
 		var delayTime: Double = 0.5
-		var speedUpObstacleCopy: SCNNode?
 		
-		for i in 0...7 {
+		for i in 0...3 {
 			for sign: Float in [-1.0, 1.0] {
-				let randomPosition = SCNVector3(x: Float(i) * 13.0, y: 1.0, z: sign * Float(arc4random_uniform(UInt32(Int(playgroundZ/2 - 2.0))) + 1))
+				let randomPosition = SCNVector3(x: Float(i) * 40.0 + 9.0, y: 1.0, z: sign * Float(arc4random_uniform(UInt32(Int(playgroundZ/2 - 2.0))) + 1))
 				
-				
-				//normal obstacle:
 				let obstacleCopy = obstacleNode?.copy() as? SCNNode
 				obstacleCopy?.position = randomPosition
 				obstacleCopy?.name = Obstacle.normal
@@ -293,25 +326,31 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 				
 				obstacleArray.append(obstacleCopy!)
 				
-				//speedUp obstacle:
-				if i % 2 == 0 {
-					speedUpObstacleCopy = speedUpObstacleNode.copy() as? SCNNode
-					speedUpObstacleCopy?.position = randomPosition
-					speedUpObstacleCopy?.position.x += 5.0
-					speedUpObstacleCopy?.position.z += 6.0
-					speedUpObstacleCopy?.physicsBody = SCNPhysicsBody(type: .static, shape: nil)
-					speedUpObstacleCopy?.physicsBody?.categoryBitMask = PhysicsCategory.speedUpObstacle
-					speedUpObstacleCopy?.physicsBody?.collisionBitMask = PhysicsCategory.none
-					speedUpObstacleCopy?.physicsBody?.collisionBitMask = PhysicsCategory.car
-					speedUpObstacleArray.append(speedUpObstacleCopy!)
-				} else { speedUpObstacleCopy = nil }
-				
 				DispatchQueue.main.asyncAfter(deadline: .now() + delayTime, execute: {
 					self.raceScene!.rootNode.addChildNode(obstacleCopy!)
-					if speedUpObstacleCopy != nil {print("addedObstacle"); self.raceScene?.rootNode.addChildNode(speedUpObstacleCopy!) }
 					self.playSound(node: obstacleCopy, name: "pop")
 				})
-				delayTime += 0.4
+				delayTime += 0.3
+			}
+		}
+		
+		for i in 0...2 {
+			for sign: Float in [-1, 1] {
+				let speedUpObstacleCopy = speedUpObstacleNode?.copy() as? SCNNode
+				speedUpObstacleCopy?.position = SCNVector3(x: Float(i) * 40.0, y: 1.3, z: sign * Float(arc4random_uniform(UInt32(Int((playgroundZ + 5)/2 - 2.0))) + 1))
+				speedUpObstacleCopy?.physicsBody = SCNPhysicsBody(type: .static, shape: nil)
+				speedUpObstacleCopy?.physicsBody?.categoryBitMask = PhysicsCategory.speedUpObstacle
+				speedUpObstacleCopy?.physicsBody?.collisionBitMask = PhysicsCategory.none
+				speedUpObstacleCopy?.physicsBody?.collisionBitMask = PhysicsCategory.car
+				speedUpObstacleArray.append(speedUpObstacleCopy!)
+				
+				
+				DispatchQueue.main.asyncAfter(deadline: .now() + delayTime, execute: {
+					self.raceScene?.rootNode.addChildNode(speedUpObstacleCopy!)
+					self.playSound(node: speedUpObstacleCopy, name: "pop")
+					speedUpObstacleCopy?.addParticleSystem(self.speedUpObstacleParticleSystem)
+				})
+				delayTime += 0.3
 			}
 		}
 		
@@ -320,35 +359,51 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 		})
 	}
 	
-	func addSpeedUpObstacles() {
-		let speedUpObstacle = raceScene?.rootNode.childNode(withName: "speedUpObstacle reference", recursively: true)
-		speedUpObstacle?.addParticleSystem(speedUpObstacleParticleSystem)
-	}
 	
 	func obstacleCollidedWithCar(car: SCNNode, obstacle: SCNNode) {
-		explodeObstacleBig(obstacle: obstacle)
-		gameState = .gameOver
-		stopTheCars()
-		DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: {
-			self.gameOver(carWon: car, atFinishLine: false)
-		})
+		let obstacleBitMask = obstacle.physicsBody?.categoryBitMask
+		
+		if obstacleBitMask == PhysicsCategory.obstacle {
+			explodeObstacleBig(obstacle: obstacle)
+			
+			car.physicsBody?.velocity.x -= 0.2
+			
+			
+		} else if obstacleBitMask == PhysicsCategory.speedUpObstacle {
+			explodeObstacle(obstacle: obstacle, speedUpType: true)
+			print(car.physicsBody?.velocity)
+			car.physicsBody?.velocity.x += 0.2
+			print(car.physicsBody?.velocity)
+		
+		}
 	}
 	
 	func obstacleInBarrier(barrier: SCNNode, obstacle: SCNNode) {
 		if obstacle.name == Obstacle.normal { //player can shot the obstacle at the other player
 			obstacle.name = Obstacle.inBarrier
-			obstacle.addParticleSystem(readyToExplodeParticleSystem)
+			obstacle.addParticleSystem(obstacleReadyToShootParticleSystem)
 		} else if obstacle.name == Obstacle.shot {
-			//add an effect so the player can easily see when he can explode the obstacle that is trying to hit him
-			
 			obstacle.name = Obstacle.readyToBeExploded // player can explode the obstacle
+			obstacle.removeParticleSystem(obstacleParticleSystem)
+			obstacle.addParticleSystem(obstacleReadyToExplodeParticleSystem)
 		}
 	}
 	
+	/*
+	func obstacleLeavedBarrier(barrier: SCNNode, obstacle: SCNNode) {
+		if obstacle.name == Obstacle.inBarrier {
+			obstacle.name = Obstacle.normal
+			obstacle.removeParticleSystem(obstacleReadyToShootParticleSystem)
+		} else if obstacle.name == Obstacle.readyToBeExploded {
+			obstacle.name = Obstacle.beingShot
+			obstacle.removeParticleSystem(obstacleReadyToExplodeParticleSystem)
+		}
+	}*/
+	
 	func shotTheObstacle(atVelocity velocity: SCNVector3) {
-		for obstacle in obstacleArray { //to predolgo traja
+		for obstacle in obstacleArray {
 			if obstacle.name == Obstacle.beingShot {
-				obstacle.removeParticleSystem(readyToExplodeParticleSystem)
+				obstacle.removeParticleSystem(obstacleReadyToShootParticleSystem)
 				obstacle.addParticleSystem(obstacleParticleSystem)
 				obstacle.physicsBody?.applyForce(velocity, asImpulse: true)
 				obstacle.name = Obstacle.shot
@@ -357,18 +412,28 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	}
 	
 	func explodeObstacle(obstacle: SCNNode, speedUpType: Bool) {
+		if speedUpType {
+			obstacle.removeParticleSystem(speedUpObstacleParticleSystem)
+		} else {
+			obstacle.removeParticleSystem(obstacleReadyToShootParticleSystem)
+			obstacle.removeParticleSystem(obstacleReadyToExplodeParticleSystem)
+			obstacle.removeParticleSystem(obstacleParticleSystem)
+		}
 		let position = obstacle.presentation.position
 		let translationMatrix = SCNMatrix4MakeTranslation(position.x, position.y, position.z)
 		
 		let particleSystem = speedUpType ? speedUpObstacleExplodeParticleSystem : obstacleExplodeParticleSystem
 		
-		raceScene?.addParticleSystem(particleSystem!, transform: translationMatrix)
+		raceScene?.addParticleSystem(particleSystem, transform: translationMatrix)
 		obstacle.removeFromParentNode()
 	}
 	
 	func explodeObstacleBig(obstacle: SCNNode) {
 		let position = obstacle.presentation.position
 		let translationMatrix = SCNMatrix4MakeTranslation(position.x, position.y, position.z)
+		obstacle.removeParticleSystem(obstacleParticleSystem)
+		obstacle.removeParticleSystem(obstacleReadyToShootParticleSystem)
+		obstacle.removeParticleSystem(obstacleReadyToExplodeParticleSystem)
 		
 		raceScene?.addParticleSystem(obstacleExplodeBigParticleSystem, transform: translationMatrix)
 		playSound(node: car1Node, name: "explosion")
@@ -492,13 +557,29 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 	
 	func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
 		if gameState == .play {
-			let player1X = (car1Node?.presentation.position.x)!
-			let player2X = (car2Node?.presentation.position.x)!
-			let slowestCarX = player1X < player2X ? player1X : player2X
-			mainCamera?.position.x = slowestCarX + 17.0
+			updateNodesPositions()
 			
-			barrier1?.position = SCNVector3(x: player1X + 1, y: 0, z: (car1Node?.presentation.position.z)!)
-			barrier2?.position = SCNVector3(x: player2X + 1, y: 0, z: (car2Node?.presentation.position.z)!)
+			for car in [car1Node, car2Node] {
+				if (car?.presentation.position.x)! > 0 && (car?.physicsBody?.velocity.x)! < 0.01 { gameOver(carWon: car!, atFinishLine: false) }
+			}
+		}
+	}
+	
+	func updateNodesPositions() {
+		let player1X = (car1Node?.presentation.position.x)!
+		let player2X = (car2Node?.presentation.position.x)!
+		let slowestCarX = player1X < player2X ? player1X : player2X
+		//let fastestCarX = player1X > player2X ? player1X : player2X
+		//let carDeltaX = fastestCarX - slowestCarX
+		mainCamera?.position.x = slowestCarX + 16.0
+		
+		
+		barrier1?.position = SCNVector3(x: player1X + 1, y: 0, z: (car1Node?.presentation.position.z)!)
+		barrier2?.position = SCNVector3(x: player2X + 1, y: 0, z: (car2Node?.presentation.position.z)!)
+		
+		
+		for controller in controllersArray {
+			controller.position.x = (mainCamera?.position.x)! - 18.0
 		}
 	}
 	
@@ -511,10 +592,10 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 			
 			
 			if nodeMaskA == PhysicsCategory.car {
-				if nodeMaskB == PhysicsCategory.obstacle { obstacleCollidedWithCar(car: contact.nodeA, obstacle: contact.nodeB) }
+				if nodeMaskB == PhysicsCategory.obstacle || nodeMaskB == PhysicsCategory.speedUpObstacle { obstacleCollidedWithCar(car: contact.nodeA, obstacle: contact.nodeB) }
 				else if nodeMaskB == PhysicsCategory.finishLine { gameOver(carWon: contact.nodeA, atFinishLine: true) }
 			} else if nodeMaskB == PhysicsCategory.car {
-				if nodeMaskA == PhysicsCategory.obstacle { obstacleCollidedWithCar(car: contact.nodeB, obstacle: contact.nodeA) }
+				if nodeMaskA == PhysicsCategory.obstacle || nodeMaskA == PhysicsCategory.speedUpObstacle { obstacleCollidedWithCar(car: contact.nodeB, obstacle: contact.nodeA) }
 				else if nodeMaskA == PhysicsCategory.finishLine { gameOver(carWon: contact.nodeB, atFinishLine: true) }
 				
 			} else if nodeMaskA == PhysicsCategory.barrier {
@@ -526,6 +607,22 @@ class GameViewController: UIViewController, SCNSceneRendererDelegate, SCNPhysics
 			else if nodeMaskB == PhysicsCategory.borderLine { explodeObstacle(obstacle: contact.nodeA, speedUpType: false) }
 		}
 	}
+	
+	/*
+	
+	func physicsWorld(_ world: SCNPhysicsWorld, didEnd contact: SCNPhysicsContact) {
+		if gameState == .play {
+			let nodeMaskA = contact.nodeA.physicsBody?.categoryBitMask
+			let nodeMaskB = contact.nodeB.physicsBody?.categoryBitMask
+			
+			if nodeMaskA == PhysicsCategory.barrier && nodeMaskB == PhysicsCategory.obstacle {
+				obstacleLeavedBarrier(barrier: contact.nodeA, obstacle: contact.nodeB)
+			} else if nodeMaskB == PhysicsCategory.barrier && nodeMaskA == PhysicsCategory.obstacle {
+				obstacleLeavedBarrier(barrier: contact.nodeB, obstacle: contact.nodeA)
+			}
+		}
+	}
+	*/
 	
 	
 	//Unrelevant variables and methods:
