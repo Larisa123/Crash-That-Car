@@ -18,6 +18,9 @@ class GameOverScene: SKScene {
 	var player2WonSprite: SKSpriteNode!
 	var replayButton: SKSpriteNode!
 	var tapToPlayLogoSprite: SKSpriteNode!
+	var tutorialLogoSprite: SKSpriteNode!
+	var tutorialImageSprite: SKSpriteNode!
+	var closeTutorialLogo: SKSpriteNode!
 	
 	var logo1: SKSpriteNode!
 	var logo2: SKSpriteNode!
@@ -92,6 +95,25 @@ class GameOverScene: SKScene {
 			addChild(logo!)
 			logo?.isHidden = true
 		}
+		
+		tutorialLogoSprite = SKSpriteNode(imageNamed: "tutorialLogo.png")
+		tutorialLogoSprite.anchorPoint = CGPoint(x: 1, y: 1)
+		tutorialLogoSprite.position = CGPoint(x: deviceSize.width*0.95, y: deviceSize.height*0.95)
+		addChild(tutorialLogoSprite)
+		tutorialLogoSprite.isHidden = true
+		
+		tutorialImageSprite = SKSpriteNode(imageNamed: "tutorialImage.png")
+		tutorialImageSprite.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+		tutorialImageSprite.position = CGPoint(x: deviceSize.width/2, y: deviceSize.height/2)
+		addChild(tutorialImageSprite)
+		tutorialImageSprite.size = deviceSize
+		tutorialImageSprite.isHidden = true
+
+		closeTutorialLogo = SKSpriteNode(imageNamed: "closeLogo.png")
+		closeTutorialLogo.anchorPoint = CGPoint(x: 1, y: 1)
+		closeTutorialLogo.position = CGPoint(x: deviceSize.width*0.95, y: deviceSize.height*0.95)
+		addChild(closeTutorialLogo)
+		closeTutorialLogo.isHidden = true
 	}
 	
 	func popSpritesOnGameOver(carWon car: String) {
@@ -109,6 +131,7 @@ class GameOverScene: SKScene {
 		player2WonSprite.isHidden = true
 		replayButton.removeAllActions()
 		replayButton.isHidden = true
+		tutorialLogoSprite.isHidden = true
 	}
 	
 	func pop(node: SKSpriteNode, withSound: Bool) {
@@ -136,11 +159,37 @@ class GameOverScene: SKScene {
 		tapToPlayLogoSprite.isHidden = false
 		repeatPopForever(node: tapToPlayLogoSprite)
 		gameViewController.gameState = .tapToPlay
+		
+		tutorialLogoSprite.isHidden = false
+		
+		if !gameViewController.tutorialFinished {
+			let popRepeatAction = SKAction.sequence([SKAction.scale(to: 1.1, duration: 1.0), SKAction.scale(to: 0.9, duration: 1.0)])
+			tutorialLogoSprite.run(SKAction.repeatForever(popRepeatAction))
+		}
 	}
 	
 	func hideTapToPlayLogo() {
 		tapToPlayLogoSprite.removeAllActions()
 		tapToPlayLogoSprite.isHidden = true
+		
+		tutorialLogoSprite.isHidden = true
+	}
+	
+	func showTutorial() {
+		hideTapToPlayLogo()
+		tutorialImageSprite.isHidden = false
+		closeTutorialLogo.isHidden = false
+		repeatPopForever(node: closeTutorialLogo)
+		gameViewController.gameState = .showingTutorial
+		
+		gameViewController.tutorialFinished = true
+	}
+	
+	func hideTutorial() {
+		tutorialImageSprite.isHidden = true
+		closeTutorialLogo.isHidden = true
+		tutorialLogoSprite.removeAllActions()
+		showTapToPlayLogo()
 	}
 	
 	func countDown() {
@@ -150,6 +199,7 @@ class GameOverScene: SKScene {
 		gameViewController.scnView.pointOfView = gameViewController.mainCamera
 		
 		run(SKAction.sequence([SKAction.wait(forDuration: 0.6),  SKAction.playSoundFileNamed("art.scnassets/Sounds/countdown.wav", waitForCompletion: true)]))
+		run(SKAction.sequence([SKAction.wait(forDuration: 4.4),  SKAction.playSoundFileNamed("art.scnassets/Sounds/cheer.wav", waitForCompletion: true)]))
 		
 		var delayTime = 0.6
 		
@@ -168,8 +218,14 @@ class GameOverScene: SKScene {
 	}
 	
 	override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-		for _ in touches {
-			if gameViewController.gameState == .tapToPlay { countDown() }
+		for touch in touches {
+			if gameViewController.gameState == .tapToPlay {
+				if atPoint(touch.location(in: self)) == tutorialLogoSprite {
+					showTutorial()
+				} else {
+					countDown()
+				}
+			} else if gameViewController.gameState == .showingTutorial { hideTutorial() }
 			else if gameViewController.gameState == .gameOverTapToPlay {
 				gameViewController.replayGame()
 			}
